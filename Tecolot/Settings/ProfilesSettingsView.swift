@@ -10,6 +10,11 @@ import SwiftTerm
 import UniformTypeIdentifiers
 
 struct ProfilesSettingsView: View {
+    private enum RenameMode {
+        case alert
+        case inline
+    }
+    
     @EnvironmentObject private var profiles: ProfileStore
     @EnvironmentObject private var themes: ThemeStore
     @Binding var activeProfileID: TerminalProfile.ID?
@@ -17,9 +22,9 @@ struct ProfilesSettingsView: View {
     @State private var showExporter = false
     @State private var exportDocument: ProfileExportDocument?
     @State private var errorMessage: String?
-    @State private var renameTarget: TerminalProfile?
+    @State private var renameTarget: (profile: TerminalProfile, mode: RenameMode)?
     @State private var renameText = ""
-
+    
     private var selectedProfile: TerminalProfile? {
         activeProfileID.flatMap { profiles.profile(withID: $0) }
     }
@@ -98,7 +103,27 @@ struct ProfilesSettingsView: View {
             List(selection: profileListSelection) {
                 ForEach(profiles.profiles) { profile in
                     HStack {
-                        Text(profile.name)
+                        if let renameTarget,
+                           renameTarget.mode == .inline,
+                           renameTarget.profile.id == profile.id {
+                            TextField("", text: $renameText)
+                                .onSubmit {
+                                    renameProfile()
+                                }
+                                .onKeyPress(.escape) {
+                                    self.renameTarget = nil
+                                    return .handled
+                                }
+                        } else {
+                            Text(profile.name)
+                                .onTapGesture {
+                                    // Deliberately only on the text to get
+                                    // Finder-style renaming. We get this
+                                    // gesture only when the profile is already
+                                    // selected, otherwise the list swallows it.
+                                    beginInlineRename(of: profile)
+                                }
+                        }
                         if profile.id == profiles.defaultProfileID {
                             Spacer()
                             Image(systemName: "star.fill")
@@ -218,7 +243,7 @@ struct ProfilesSettingsView: View {
 
     private func presentRename() {
         guard let profile = selectedProfile else { return }
-        renameTarget = profile
+        renameTarget = (profile: profile, mode: .alert)
         renameText = profile.name
     }
 
@@ -226,7 +251,7 @@ struct ProfilesSettingsView: View {
         guard let renameTarget else { return }
         do {
             try profiles.rename(
-                renameTarget.id,
+                renameTarget.profile.id,
                 to: renameText.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             self.renameTarget = nil
@@ -234,7 +259,12 @@ struct ProfilesSettingsView: View {
             report(error)
         }
     }
-
+    
+    private func beginInlineRename(of profile: TerminalProfile) {
+        renameTarget = (profile: profile, mode: .inline)
+        renameText = profile.name
+    }
+    
     private func setSelectedProfileAsDefault() {
         guard let activeProfileID else { return }
         do {
@@ -281,7 +311,7 @@ struct ProfilesSettingsView: View {
 
     private var renamePresentation: Binding<Bool> {
         Binding(
-            get: { renameTarget != nil },
+            get: { renameTarget?.mode == .alert },
             set: { if !$0 { renameTarget = nil } }
         )
     }
