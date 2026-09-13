@@ -62,13 +62,15 @@ struct ProfilesSettingsView: View {
         .onChange(of: profiles.profiles.map(\.id)) {
             repairActiveProfileSelection()
         }
-        .onChange(of: renameFocus) { oldFocus, _ in
-            guard oldFocus != nil else { return }
+        .onChange(of: renameFocus) { oldFocus, newFocus in
+            guard oldFocus != nil, newFocus == nil, let renameTarget else { return }
             // Text field lost focus, check whether a commit of the profile name
             // is needed.
-            if let renameTarget, renameText != renameTarget.profile.name {
-                renameProfile()
+            guard renameText != renameTarget.profile.name else {
+                self.renameTarget = nil
+                return
             }
+            renameProfile()
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
             switch result {
