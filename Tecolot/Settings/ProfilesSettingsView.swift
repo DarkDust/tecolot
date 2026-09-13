@@ -15,6 +15,11 @@ struct ProfilesSettingsView: View {
         case inline
     }
     
+    private struct RenameTarget: Equatable {
+        let profile: TerminalProfile
+        let mode: RenameMode
+    }
+    
     @EnvironmentObject private var profiles: ProfileStore
     @EnvironmentObject private var themes: ThemeStore
     @Binding var activeProfileID: TerminalProfile.ID?
@@ -22,8 +27,9 @@ struct ProfilesSettingsView: View {
     @State private var showExporter = false
     @State private var exportDocument: ProfileExportDocument?
     @State private var errorMessage: String?
-    @State private var renameTarget: (profile: TerminalProfile, mode: RenameMode)?
+    @State private var renameTarget: RenameTarget?
     @State private var renameText = ""
+    @FocusState private var renameFocus: TerminalProfile.ID?
     
     private var selectedProfile: TerminalProfile? {
         activeProfileID.flatMap { profiles.profile(withID: $0) }
@@ -55,6 +61,14 @@ struct ProfilesSettingsView: View {
         }
         .onChange(of: profiles.profiles.map(\.id)) {
             repairActiveProfileSelection()
+        }
+        .onChange(of: renameFocus) { oldFocus, _ in
+            guard oldFocus != nil else { return }
+            // Text field lost focus, check whether a commit of the profile name
+            // is needed.
+            if let renameTarget, renameText != renameTarget.profile.name {
+                renameProfile()
+            }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
             switch result {
@@ -103,27 +117,8 @@ struct ProfilesSettingsView: View {
             List(selection: profileListSelection) {
                 ForEach(profiles.profiles) { profile in
                     HStack {
-                        if let renameTarget,
-                           renameTarget.mode == .inline,
-                           renameTarget.profile.id == profile.id {
-                            TextField("", text: $renameText)
-                                .onSubmit {
-                                    renameProfile()
-                                }
-                                .onKeyPress(.escape) {
-                                    self.renameTarget = nil
-                                    return .handled
-                                }
-                        } else {
-                            Text(profile.name)
-                                .onTapGesture {
-                                    // Deliberately only on the text to get
-                                    // Finder-style renaming. We get this
-                                    // gesture only when the profile is already
-                                    // selected, otherwise the list swallows it.
-                                    beginInlineRename(of: profile)
-                                }
-                        }
+                        nameView(for: profile)
+                        
                         if profile.id == profiles.defaultProfileID {
                             Spacer()
                             Image(systemName: "star.fill")
@@ -191,6 +186,38 @@ struct ProfilesSettingsView: View {
             .padding(6)
         }
     }
+    
+    @ViewBuilder
+    private func nameView(for profile: TerminalProfile) -> some View {
+        if let renameTarget,
+           renameTarget.mode == .inline,
+           renameTarget.profile.id == profile.id {
+            TextField("Name", text: $renameText)
+                .fixedSize(horizontal: true, vertical: false)
+                .focused($renameFocus, equals: profile.id)
+                .onAppear {
+                    // Immediately focus the text field to start editing.
+                    // Otherwise the click just makes the text field appear and
+                    // you need another click to start editing.
+                    renameFocus = profile.id
+                }
+                .onKeyPress(.escape) {
+                    // Revert the change and cancel editing.
+                    self.renameText = profile.name
+                    self.renameTarget = nil
+                    return .handled
+                }
+        } else {
+            Text(profile.name)
+                .onTapGesture {
+                    if activeProfileID == profile.id {
+                        beginInlineRename(of: profile)
+                    } else {
+                        activeProfileID = profile.id
+                    }
+                }
+        }
+    }
 
     private func addProfile() {
         var profile = profiles.defaultProfile
@@ -243,7 +270,7 @@ struct ProfilesSettingsView: View {
 
     private func presentRename() {
         guard let profile = selectedProfile else { return }
-        renameTarget = (profile: profile, mode: .alert)
+        renameTarget = RenameTarget(profile: profile, mode: .alert)
         renameText = profile.name
     }
 
@@ -261,7 +288,7 @@ struct ProfilesSettingsView: View {
     }
     
     private func beginInlineRename(of profile: TerminalProfile) {
-        renameTarget = (profile: profile, mode: .inline)
+        renameTarget =  RenameTarget(profile: profile, mode: .inline)
         renameText = profile.name
     }
     
