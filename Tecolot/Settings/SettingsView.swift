@@ -240,6 +240,10 @@ struct SettingsEscapeKeyHandler: NSViewRepresentable {
                     // the text view handle the escape button.
                     return event
                 }
+                if window.firstResponder is ShortcutCaptureNSView {
+                    // Our keyboard shortcut recorder.
+                    return event
+                }
                 
                 closeWindow(window)
                 return nil

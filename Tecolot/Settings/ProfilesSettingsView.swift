@@ -774,17 +774,8 @@ private struct TerminalKeyBindingRow: View {
 
     var body: some View {
         HStack {
-            TextField("Key", text: valueBinding(\.key))
-                .frame(width: 70)
+            ShortcutEditView(keyBinding: keyBinding, update: update)
                 .accessibilityLabel("Key")
-
-            Menu(modifierLabel) {
-                Toggle("Command", isOn: modifierBinding(.command))
-                Toggle("Shift", isOn: modifierBinding(.shift))
-                Toggle("Option", isOn: modifierBinding(.option))
-                Toggle("Control", isOn: modifierBinding(.control))
-            }
-            .frame(width: 90)
 
             Picker("Action", selection: valueBinding(\.action)) {
                 ForEach(TerminalKeyAction.allCases, id: \.self) { action in
@@ -803,15 +794,6 @@ private struct TerminalKeyBindingRow: View {
         }
     }
 
-    private var modifierLabel: String {
-        var labels: [String] = []
-        if keyBinding.modifiers.contains(.control) { labels.append("⌃") }
-        if keyBinding.modifiers.contains(.option) { labels.append("⌥") }
-        if keyBinding.modifiers.contains(.shift) { labels.append("⇧") }
-        if keyBinding.modifiers.contains(.command) { labels.append("⌘") }
-        return labels.isEmpty ? "None" : labels.joined()
-    }
-
     private func valueBinding<Value>(
         _ keyPath: WritableKeyPath<TerminalKeyBinding, Value>
     ) -> Binding<Value> {
@@ -820,21 +802,6 @@ private struct TerminalKeyBindingRow: View {
             set: { newValue in
                 var changed = keyBinding
                 changed[keyPath: keyPath] = newValue
-                update(changed)
-            }
-        )
-    }
-
-    private func modifierBinding(_ modifier: TerminalKeyModifiers) -> Binding<Bool> {
-        Binding(
-            get: { keyBinding.modifiers.contains(modifier) },
-            set: { enabled in
-                var changed = keyBinding
-                if enabled {
-                    changed.modifiers.insert(modifier)
-                } else {
-                    changed.modifiers.remove(modifier)
-                }
                 update(changed)
             }
         )
